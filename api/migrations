@@ -1,0 +1,63 @@
+#!/usr/bin/env php
+<?php
+
+require_once __DIR__ . '/vendor/autoload.php';
+
+use Doctrine\DBAL\DriverManager;
+use Doctrine\Migrations\Configuration\Configuration;
+use Doctrine\Migrations\Configuration\Connection\ExistingConnection;
+use Doctrine\Migrations\Configuration\Migration\ExistingConfiguration;
+use Doctrine\Migrations\DependencyFactory;
+use Doctrine\Migrations\Metadata\Storage\TableMetadataStorageConfiguration;
+use Doctrine\Migrations\Tools\Console\Command;
+use StorageApi\Kernel;
+use Symfony\Component\Console\Application;
+
+$settings = (new Kernel(__DIR__))->getSettings();
+$db = $settings->get('db');
+$dbParams = [
+    'dbname' => $db['name'] ?? null,
+    'user' => $db['username'] ?? null,
+    'password' => $db['password'] ?? null,
+    'host' => $db['host'] ?? null,
+    'driver' => $db['driver'] ?? null,
+];
+
+$connection = DriverManager::getConnection($dbParams);
+
+$configuration = new Configuration($connection);
+
+$configuration->addMigrationsDirectory(
+    'StorageApi\Database\Migrations',
+    $settings->get('app') . '/Database/Migrations'
+);
+$configuration->setAllOrNothing(true);
+$configuration->setCheckDatabasePlatform(false);
+
+$storageConfiguration = new TableMetadataStorageConfiguration();
+$storageConfiguration->setTableName('doctrine_migration_versions');
+
+$configuration->setMetadataStorageConfiguration($storageConfiguration);
+
+$dependencyFactory = DependencyFactory::fromConnection(
+    new ExistingConfiguration($configuration),
+    new ExistingConnection($connection)
+);
+
+$cli = new Application('Doctrine Migrations');
+$cli->setCatchExceptions(true);
+
+$cli->addCommands(array(
+    new Command\DumpSchemaCommand($dependencyFactory),
+    new Command\ExecuteCommand($dependencyFactory),
+    new Command\GenerateCommand($dependencyFactory),
+    new Command\LatestCommand($dependencyFactory),
+    new Command\ListCommand($dependencyFactory),
+    new Command\MigrateCommand($dependencyFactory),
+    new Command\RollupCommand($dependencyFactory),
+    new Command\StatusCommand($dependencyFactory),
+    new Command\SyncMetadataCommand($dependencyFactory),
+    new Command\VersionCommand($dependencyFactory),
+));
+
+$cli->run();
